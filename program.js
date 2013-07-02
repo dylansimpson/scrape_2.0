@@ -16,7 +16,7 @@ var
 
 			names = ($('#my-players-table table tr td a').map(function(i,link) { return $(link).text();}))
 
-			console.log(names[44]);
+			// console.log(names[44]);
 
 			number_of_players = names.length;
 

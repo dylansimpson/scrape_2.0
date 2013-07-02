@@ -7,6 +7,8 @@
   },
   "dependencies": {
       "cheerio": "*",
-      "request": "*"
+      "request": "*",
+      "async": "*",
+      "underscore": "*"
   }
 }

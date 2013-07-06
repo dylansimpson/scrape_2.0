@@ -4,6 +4,7 @@ async = require 'async'
 fs = require 'fs'
 {exec} = require 'child_process'
 _ = require 'underscore'
+util = require 'util'
 
 save_and_open_page = (body) ->
   temp_name = 'tempytempy'
@@ -39,6 +40,7 @@ fetch_scorecards = (player, callback) ->
     callback null, results
 
 fetch_scorecard = (url, callback) ->
+  # console.log "Fetch url #{url}"
   request url, (error, response, body) ->
     $ = cheerio.load body
     tournaments = []
@@ -52,22 +54,78 @@ fetch_scorecard = (url, callback) ->
 
 fetch_tournaments = (tournaments, callback) ->
   records = tournaments.map (tournament) =>
-    (callback) => fetch_tournament tournament.url, callback
+    (callback) => fetch_tournament_card tournament.url, tournament.url, callback
 
   async.series tournaments, (err, results) ->
-    callback results
+    callback null, results
 
-fetch_tournament = (name, url, callback) ->
-  request url, (error, response, body) ->
+fetch_tournament_card = (name, url, callback) ->
+  # console.log "Fetch url #{url}"
+  request url, (error, response, body) =>
     $ = cheerio.load body
-    callback null, { name: name, data: $('[id|=round]').text() }
+    rounds = []
+
+    year = if (result = /, (\d{4})$/.exec($('.mod-player-stats h3').text())) then result[1] else '0000'
+
+    i = 0
+    for round in $('.active table')
+      rounds[i] = {}
+      rounds[i].round = $(round).find('tr.stathead').text()
+
+      k = 0
+      rounds[i].holes = []
+      for colhead in $(round).find('tr.colhead')
+        for td in $(colhead).find('td')[1..9]
+          data = $(td).html().replace(/<br>/g, "|").split("|")
+          rounds[i].holes[k] = {}
+          rounds[i].holes[k].yards = data[1]
+          rounds[i].holes[k].par = data[2]
+          k += 1
+
+      k = 0
+      for oddrow in $(round).find('tr.oddrow')
+        for td in $(oddrow).find('td')[1..9]
+          rounds[i].holes[k].score = $(td).text()
+          k += 1
+
+      i += 1
+
+    callback null, { url: url, name: name, year: year, rounds: rounds }
+
+compact_array = (list) ->
+  _.reject list, (t) -> t.length == 0
+
+write_player_data = (name, results, callback) ->
+  console.log "Writing player #{name}"
+  fs.exists "players/#{name}.csv", (exists) =>
+    fs.unlink("players/#{name}.csv") if exists
+    for card in results
+      for round in card.rounds
+        row = "#{card.url}, #{card.name}, #{card.year}, "
+        i = 1
+        for hole in round.holes
+          row += "#{i}, #{hole.yards}, #{hole.par}, #{hole.score}, "
+          i += 1
+        row += "\n"
+
+        fs.appendFile("players/#{name}.csv", row)
+
+      callback null, row
 
 fetch_players_list (players) ->
-  players = players.map (player) =>
-    (callback) => fetch_scorecards player, callback
+  fetchers = players.map (player) =>
+    _.throttle (callback) =>
+      fetch_scorecards player, (error, tournaments) =>
+        tournaments = _.flatten compact_array(tournaments)
+        getters = tournaments.map (tournament) =>
+          (callback) =>
+            fetch_tournament_card tournament.tournament, tournament.url, (error, cards) ->
+              callback null, cards
 
-  async.series [players[982]], (err, results) ->
-    console.log results[0]
+        async.series getters, (error, results) =>
+          write_player_data player.name, results, (error, results) =>
+            callback null, null
+      , 100
 
-    fetch_tournaments results[0], (results) ->
-      console.log results
+  async.series fetchers, (err, results) =>
+    console.log 'Done'

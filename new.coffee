@@ -6,10 +6,10 @@ fs = require 'fs'
 _ = require 'underscore'
 util = require 'util'
 
-save_and_open_page = (body) ->
-  temp_name = 'tempytempy'
-  fs.writeFile "/tmp/#{temp_name}.html", body
-  exec "open /tmp/#{temp_name}.html"
+# save_and_open_page = (body) ->
+#   temp_name = 'tempytempy'
+#   fs.writeFile "/tmp/#{temp_name}.html", body
+#   exec "open /tmp/#{temp_name}.html"
 
 fetch_players_list = (callback) ->
   request 'http://espn.go.com/golf/players', (error, response, body) ->
